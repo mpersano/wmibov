@@ -348,7 +348,7 @@ void wm_window::draw_quote(const std::string& symbol, const std::string& last,
 
 void wm_window::run()
 {
-    static const time_t update_interval = 10;
+    static const time_t update_interval = 30;
 
     time_t last_update = time(0);
     fetch_quotes();
@@ -358,6 +358,7 @@ void wm_window::run()
         if (now - last_update >= update_interval) {
             last_update = now;
             fetch_quotes();
+            redraw_window();
         }
 
         while (XPending(m_display)) {
