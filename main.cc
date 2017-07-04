@@ -61,12 +61,12 @@ bool quote_fetcher::fetch()
     boost::property_tree::ptree tree;
     boost::property_tree::read_json(response, tree);
 
-    const auto replace_char = [](std::string& str, char c0, char c1)
-                              {
-                                  auto pos = str.find(c0);
-                                  if (pos != std::string::npos)
-                                      str.replace(pos, 1, 1, c1);
-                              };
+    static const auto replace_char = [](std::string& str, char c0, char c1)
+                                     {
+                                         auto pos = str.find(c0);
+                                         if (pos != std::string::npos)
+                                             str.replace(pos, 1, 1, c1);
+                                     };
 
     m_date = tree.get("TIME_NOW", "");
 
@@ -95,11 +95,13 @@ public:
 private:
     bool init_window(int argc, char *argv[]);
     bool init_pixmaps();
+    Pixel get_color(const char *name);
 
     void redraw_window();
     void draw_string(Pixmap font_pixmap, const std::string& text, int x, int y);
     void draw_quote(const std::string& symbol, const std::string& last,
                     const std::string& change, const std::string& percent_change);
+
     void fetch_quotes();
 
     Display *m_display = nullptr;
@@ -110,12 +112,16 @@ private:
     Window m_icon_window;
     GC m_normal_gc;
     Pixmap m_visible_pixmap;
-    Pixmap m_white_font_pixmap, m_white_font_mask;
-    Pixmap m_green_font_pixmap, m_green_font_mask;
-    Pixmap m_red_font_pixmap, m_red_font_mask;
+    Pixmap m_white_font_pixmap;
+    Pixmap m_green_font_pixmap;
+    Pixmap m_red_font_pixmap;
 
     std::vector<std::unique_ptr<quote_fetcher>> m_quotes;
     size_t m_cur_quote = 0;
+
+    static const int WINDOW_SIZE = 64;
+    static const int CHAR_WIDTH = 8;
+    static const int CHAR_HEIGHT = 12;
 };
 
 wm_window::wm_window()
@@ -142,6 +148,9 @@ bool wm_window::initialize(int argc, char *argv[])
     m_screen = DefaultScreen(m_display);
     m_root_window = RootWindow(m_display, m_screen);
 
+    m_white_pixel = get_color("white");
+    m_black_pixel = get_color("black");
+
     if (!init_pixmaps())
         return false;
 
@@ -165,34 +174,31 @@ void wm_window::fetch_quotes()
     }
 }
 
+Pixel wm_window::get_color(const char *name)
+{
+    XWindowAttributes attribs;
+    XGetWindowAttributes(m_display, m_root_window, &attribs);
+
+    XColor color;
+    color.pixel = 0;
+
+    if (!XParseColor(m_display, attribs.colormap, name, &color))
+        std::cerr << "failed to parse color " << name << "\n";
+
+    if (!XAllocColor(m_display, attribs.colormap, &color))
+        std::cerr << "failed to alloc color " << name << "\n";
+
+    return color.pixel;
+}
+
 bool wm_window::init_window(int argc, char *argv[])
 {
     // mostly cargo-culted from the asbeats dockapp
 
     // create window
 
-    const auto get_color = [=](const char *name)
-                           {
-                               XWindowAttributes attribs;
-                               XGetWindowAttributes(m_display, m_root_window, &attribs);
-
-                               XColor color;
-                               color.pixel = 0;
-
-                               if (!XParseColor(m_display, attribs.colormap, name, &color))
-                                   std::cerr << "failed to parse color " << name << "\n";
-
-                               if (!XAllocColor(m_display, attribs.colormap, &color))
-                                   std::cerr << "failed to alloc color " << name << "\n";
-
-                               return color.pixel;
-                           };
-
-    m_white_pixel = get_color("white");
-    m_black_pixel = get_color("black");
-
     XSizeHints size_hints;
-    size_hints.flags = USSize|USPosition;
+    size_hints.flags = USSize | USPosition;
     size_hints.x = size_hints.y = 0;
 
     const unsigned border_width = 1;
@@ -200,8 +206,7 @@ bool wm_window::init_window(int argc, char *argv[])
     XWMGeometry(m_display, m_screen, nullptr, nullptr, border_width, &size_hints,
                 &size_hints.x, &size_hints.y, &size_hints.width, &size_hints.height, &gravity);
 
-    size_hints.width = 64;
-    size_hints.height = 64;
+    size_hints.width = size_hints.height = WINDOW_SIZE;
 
     m_window = XCreateSimpleWindow(m_display, m_root_window, size_hints.x, size_hints.y,
                                    size_hints.width, size_hints.height, border_width,
@@ -271,16 +276,16 @@ bool wm_window::init_window(int argc, char *argv[])
 
 bool wm_window::init_pixmaps()
 {
-    m_visible_pixmap = XCreatePixmap(m_display, m_root_window, 64, 64, DefaultDepth(m_display, DefaultScreen(m_display)));
+    m_visible_pixmap = XCreatePixmap(m_display, m_root_window, WINDOW_SIZE, WINDOW_SIZE, DefaultDepth(m_display, DefaultScreen(m_display)));
 
     XpmAttributes xpm_attribs;
     xpm_attribs.valuemask = XpmReturnPixels | XpmReturnExtensions | XpmExactColors | XpmCloseness;
     xpm_attribs.exactColors = False;
     xpm_attribs.closeness = 40000;
 
-    XpmCreatePixmapFromData(m_display, m_root_window, font_white, &m_white_font_pixmap, &m_white_font_mask, &xpm_attribs);
-    XpmCreatePixmapFromData(m_display, m_root_window, font_green, &m_green_font_pixmap, &m_green_font_mask, &xpm_attribs);
-    XpmCreatePixmapFromData(m_display, m_root_window, font_red, &m_red_font_pixmap, &m_red_font_mask, &xpm_attribs);
+    XpmCreatePixmapFromData(m_display, m_root_window, font_white, &m_white_font_pixmap, nullptr, &xpm_attribs);
+    XpmCreatePixmapFromData(m_display, m_root_window, font_green, &m_green_font_pixmap, nullptr, &xpm_attribs);
+    XpmCreatePixmapFromData(m_display, m_root_window, font_red, &m_red_font_pixmap, nullptr, &xpm_attribs);
 
     return true;
 }
@@ -288,7 +293,7 @@ bool wm_window::init_pixmaps()
 void wm_window::redraw_window()
 {
     XSetForeground(m_display, m_normal_gc, m_black_pixel);
-    XFillRectangle(m_display, m_visible_pixmap, m_normal_gc, 0, 0, 64, 64);
+    XFillRectangle(m_display, m_visible_pixmap, m_normal_gc, 0, 0, WINDOW_SIZE, WINDOW_SIZE);
 
     if (m_cur_quote < m_quotes.size()) {
         const auto& quote = m_quotes[m_cur_quote];
@@ -298,63 +303,66 @@ void wm_window::redraw_window()
     XEvent event;
     while (XCheckTypedWindowEvent(m_display, m_icon_window, Expose, &event))
         ;
-    XCopyArea(m_display, m_visible_pixmap, m_icon_window, m_normal_gc, 0, 0, 64, 64, 0, 0);
+    XCopyArea(m_display, m_visible_pixmap, m_icon_window, m_normal_gc, 0, 0, WINDOW_SIZE, WINDOW_SIZE, 0, 0);
 
     while (XCheckTypedWindowEvent(m_display, m_window, Expose, &event))
         ;
-    XCopyArea(m_display, m_visible_pixmap, m_window, m_normal_gc, 0, 0, 64, 64, 0, 0);
+    XCopyArea(m_display, m_visible_pixmap, m_window, m_normal_gc, 0, 0, WINDOW_SIZE, WINDOW_SIZE, 0, 0);
 }
 
 void wm_window::draw_string(Pixmap font_pixmap, const std::string& text, int x, int y)
 {
-    static const int char_width = 8;
-    static const int char_height = 12;
-
     static const std::string font_chars = " !\"#$%&'()*+,-./0123456789:;<=>?"
                                           "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_"
                                           "`abcdefghijklmnopqrstuvwxyz{|}~*";
+    static const int chars_per_row = 32;
 
     for (auto ch : text) {
         auto pos = font_chars.find(ch);
 
         if (pos != std::string::npos) {
-            static const int chars_per_row = 32;
 
             const int char_col = pos%chars_per_row;
             const int char_row = pos/chars_per_row;
 
             XCopyArea(m_display, font_pixmap, m_visible_pixmap, m_normal_gc,
-                      char_col*char_width, char_row*char_height,
-                      char_width, char_height,
+                      char_col*CHAR_WIDTH, char_row*CHAR_HEIGHT,
+                      CHAR_WIDTH, CHAR_HEIGHT,
                       x, y);
         }
 
-        x += char_width;
+        x += CHAR_WIDTH;
     }
 }
 
 void wm_window::draw_quote(const std::string& symbol, const std::string& last,
                            const std::string& change, const std::string& percent_change)
 {
-    const int base_y = (64 - 4*12)/2;
+    int base_y = (WINDOW_SIZE - 4*CHAR_HEIGHT)/2;
 
-    draw_string(m_white_font_pixmap, symbol, (64 - symbol.size()*8)/2, base_y);
-    draw_string(m_white_font_pixmap, last, (64 - last.size()*8)/2, base_y + 12);
+    const auto draw_string_centered = [&](Pixmap font_pixmap, const std::string& str)
+                                      {
+                                          draw_string(font_pixmap, str, (WINDOW_SIZE - str.size()*CHAR_WIDTH)/2, base_y);
+                                          base_y += CHAR_HEIGHT;
+                                      };
+
+    draw_string_centered(m_white_font_pixmap, symbol);
+    draw_string_centered(m_white_font_pixmap, last);
 
     auto change_font = change[0] == '+' ? m_green_font_pixmap : m_red_font_pixmap;
-    draw_string(change_font, change, (64 - change.size()*8)/2, base_y + 24);
-    draw_string(change_font, percent_change, (64 - percent_change.size()*8)/2, base_y + 36);
+    draw_string_centered(change_font, change);
+    draw_string_centered(change_font, percent_change);
 }
 
 void wm_window::run()
 {
     static const time_t update_interval = 30;
 
-    time_t last_update = time(0);
+    time_t last_update = time(nullptr);
     fetch_quotes();
 
     while (true) {
-        const time_t now = time(0);
+        const time_t now = time(nullptr);
         if (now - last_update >= update_interval) {
             last_update = now;
             fetch_quotes();
@@ -396,10 +404,10 @@ main(int argc, char *argv[])
     // TODO: read these from configuration file
 #if 0
     const std::vector<std::string> quotes
-        { "BVSP", "IEE", "INDX", "ICON",
-          "IFNC", "IMOB", "IVBX", "ITAG",
-          "MLCX", "SMLL", "ISE", "IGCT",
-          "IBX50", "IBX", "ICO2" };
+        { "BVSP",  "IEE",   "INDX",  "ICON",
+          "IFNC",  "IMOB",  "IVBX",  "ITAG",
+          "MLCX",  "SMLL",  "ISE",   "IGCT",
+          "IBX50", "IBX",   "ICO2" };
 #else
     const std::vector<std::string> quotes { "BVSP", "IFNC" };
 #endif
