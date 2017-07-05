@@ -4,6 +4,7 @@
 
 #include <boost/format.hpp>
 #include <boost/algorithm/string/replace.hpp>
+#include <boost/lexical_cast.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
 
@@ -29,26 +30,26 @@ public:
     bool fetch();
 
     const std::string& symbol() const { return m_symbol; }
-    const std::string& date() const { return m_date; }
-    const std::string& last() const { return m_last; }
-    const std::string& change_percent() const { return m_change_percent; }
-    const std::string& change() const { return m_change; }
+    double last() const { return m_last; }
+    double change_percent() const { return m_change_percent; }
+    double change() const { return m_change; }
 
 private:
     curl_request m_request;
 
     std::string m_symbol;
-    std::string m_date;
-    std::string m_last;
-    std::string m_change_percent;
-    std::string m_change;
+    double m_last;
+    double m_change_percent;
+    double m_change;
 };
 
 quote_fetcher::quote_fetcher(const std::string& symbol)
     : m_symbol { symbol }
+    , m_last { 0.0 }
+    , m_change_percent { 0.0 }
+    , m_change { 0.0 }
 {
-    auto url = boost::format("http://g1.globo.com/indicadorg1/quote/.%1%/resumo_bolsa/") % m_symbol;
-    m_request.set_url(url.str());
+    m_request.set_url(std::string("http://exame.abril.com.br/coletor/quote/") + m_symbol);
 }
 
 bool quote_fetcher::fetch()
@@ -56,28 +57,18 @@ bool quote_fetcher::fetch()
     if (!m_request.fetch())
         return false;
 
+    // {"trdprc_1":9.01,"low_1":9.0,"trdtim_1":"20:08","high_1":9.06,"acvol_1":5811900,"yrlow":6.8548,"trdvol_1":900,"name":"ITSA4","pctchng":-0.11,"hst_close":9.02,"trade_time":"2017-07-04T20:08:00Z","cf_name":"ITAUSA PN","netchng_1":-0.01,"open_prc":9.0,"yrhigh":10.4867,"historical_close_date":"2017-07-03","trade_date":"2017-07-04"}
+
     std::stringstream response { m_request.buffer() };
 
     boost::property_tree::ptree tree;
     boost::property_tree::read_json(response, tree);
 
-    static const auto replace_char = [](std::string& str, char c0, char c1)
-                                     {
-                                         auto pos = str.find(c0);
-                                         if (pos != std::string::npos)
-                                             str.replace(pos, 1, 1, c1);
-                                     };
+    m_last = boost::lexical_cast<double>(tree.get("trdprc_1", "0"));
+    m_change_percent = boost::lexical_cast<double>(tree.get("pctchng", "0"));
+    m_change = boost::lexical_cast<double>(tree.get("netchng_1", "0"));
 
-    m_date = tree.get("TIME_NOW", "");
-
-    m_last = tree.get("CF_LAST", "");
-    replace_char(m_last, '.', ',');
-
-    m_change_percent = tree.get("PCTCHNG", "");
-    replace_char(m_change_percent, ',', '.');
-
-    m_change = tree.get("CF_NETCHNG", "");
-    replace_char(m_change, ',', '.');
+    // XXX catch bad_lexical_cast
 
     return true;
 }
@@ -297,7 +288,10 @@ void wm_window::redraw_window()
 
     if (m_cur_quote < m_quotes.size()) {
         const auto& quote = m_quotes[m_cur_quote];
-        draw_quote(quote->symbol(), quote->last(), quote->change(), quote->change_percent());
+        auto last = boost::format("%.2f") % quote->last();
+        auto change = boost::format("%+.2f") % quote->change();
+        auto change_percent = boost::format("%+.2f%%") % quote->change_percent();
+        draw_quote(quote->symbol(), last.str(), change.str(), change_percent.str());
     }
 
     XEvent event;
@@ -402,15 +396,7 @@ int
 main(int argc, char *argv[])
 {
     // TODO: read these from configuration file
-#if 0
-    const std::vector<std::string> quotes
-        { "BVSP",  "IEE",   "INDX",  "ICON",
-          "IFNC",  "IMOB",  "IVBX",  "ITAG",
-          "MLCX",  "SMLL",  "ISE",   "IGCT",
-          "IBX50", "IBX",   "ICO2" };
-#else
-    const std::vector<std::string> quotes { "BVSP", "IFNC" };
-#endif
+    const std::vector<std::string> quotes { "ITSA4" };
 
     wm_window window;
 
