@@ -9,8 +9,8 @@ find_package(X11 REQUIRED)
 
 include_directories(${CURL_INCLUDE_DIRS} ${X11_INCLUDE_DIR} ${X11_Xpm_INCLUDE_PATH})
 
-set(SOURCES main.cc curl_request.cc)
+set(SOURCES main.cc wm_window.cc quote_fetcher.cc curl_request.cc)
 
 add_executable(wmibov ${SOURCES})
 
-target_link_libraries(wmibov ${CURL_LIBRARIES} ${X11_LIBRARIES} ${X11_Xpm_LIB})
+target_link_libraries(wmibov ${CURL_LIBRARIES} ${X11_LIBRARIES} ${X11_Xpm_LIB} pthread)
