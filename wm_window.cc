@@ -50,7 +50,6 @@ void wm_window::add_quote(const std::string& symbol)
 {
     quote_state quote;
     quote.symbol = symbol;
-    quote.last_update = static_cast<time_t>(0);
     m_quotes.push_back(quote);
 }
 
@@ -209,7 +208,6 @@ void wm_window::draw_string(Pixmap font_pixmap, const std::string& text, int x, 
         auto pos = font_chars.find(ch);
 
         if (pos != std::string::npos) {
-
             const int char_col = pos%chars_per_row;
             const int char_row = pos/chars_per_row;
 

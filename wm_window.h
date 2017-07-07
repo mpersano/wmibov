@@ -38,7 +38,7 @@ private:
     struct quote_state
     {
         std::string symbol;
-        time_t last_update;
+        time_t last_update = static_cast<time_t>(0);
         bool waiting;
         double last;
         double change;

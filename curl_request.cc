@@ -21,7 +21,7 @@ size_t curl_request::static_write_callback(char *buffer, size_t size, size_t nme
 size_t curl_request::write_callback(char *buffer, size_t size, size_t nmemb)
 {
     const size_t bytes = size*nmemb;
-    m_buffer.append(std::string(buffer, bytes));
+    m_buffer.append(buffer, bytes);
     return bytes;
 }
 
@@ -33,10 +33,22 @@ void curl_request::set_url(const std::string& url)
 bool curl_request::fetch()
 {
     m_buffer.clear();
-    return curl_easy_perform(m_curl) == CURLE_OK;
+    m_response_code = 0;
+
+    if (curl_easy_perform(m_curl) != CURLE_OK)
+        return false;
+
+    curl_easy_getinfo(m_curl, CURLINFO_RESPONSE_CODE, &m_response_code);
+
+    return true;
 }
 
 const std::string& curl_request::buffer() const
 {
     return m_buffer;
+}
+
+long curl_request::response_code() const
+{
+    return m_response_code;
 }
