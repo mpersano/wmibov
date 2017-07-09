@@ -16,7 +16,7 @@ quote_fetcher::quote_fetcher(wm_window& window)
             while (true) {
                 std::string symbol;
                 {
-                    std::unique_lock<std::mutex> lock(m_mutex);
+                    std::unique_lock<std::mutex> lock { m_mutex };
 
                     while (!m_done && m_queue.empty())
                         m_condition.wait(lock);
@@ -28,7 +28,7 @@ quote_fetcher::quote_fetcher(wm_window& window)
                     m_queue.pop_front();
                 }
 
-                request.set_url(std::string("http://exame.abril.com.br/coletor/quote/") + symbol);
+                request.set_url(std::string { "http://exame.abril.com.br/coletor/quote/" } + symbol);
 
                 if (request.fetch() && request.response_code() == 200) {
                     std::stringstream response { request.buffer() };
@@ -62,7 +62,7 @@ quote_fetcher::~quote_fetcher()
 void quote_fetcher::fetch(const std::string& symbol)
 {
     {
-        std::unique_lock<std::mutex> lock(m_mutex);
+        std::unique_lock<std::mutex> lock { m_mutex };
         m_queue.push_back(symbol);
     }
     m_condition.notify_one();

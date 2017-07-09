@@ -14,7 +14,7 @@
 #include "font_yellow.xpm"
 
 wm_window::wm_window()
-    : m_quote_fetcher { new quote_fetcher(*this) }
+    : m_quote_fetcher { new quote_fetcher { *this } }
 {
 }
 
@@ -98,7 +98,7 @@ bool wm_window::init_window(int argc, char *argv[])
     size_hints.flags = USSize | USPosition;
     size_hints.x = size_hints.y = 0;
 
-    const unsigned border_width = 1;
+    const unsigned border_width { 1 };
     int gravity;
     XWMGeometry(m_display, m_screen, nullptr, nullptr, border_width, &size_hints,
                 &size_hints.x, &size_hints.y, &size_hints.width, &size_hints.height, &gravity);
@@ -123,7 +123,7 @@ bool wm_window::init_window(int argc, char *argv[])
 
     // event masks
 
-    const auto event_mask = ExposureMask | ButtonPressMask | StructureNotifyMask;
+    const auto event_mask { ExposureMask | ButtonPressMask | StructureNotifyMask };
     XSelectInput(m_display, m_window, event_mask);
     XSelectInput(m_display, m_icon_window, event_mask);
 
@@ -197,7 +197,7 @@ void wm_window::redraw_window()
     if (m_cur_quote < m_quotes.size()) {
         quote_state quote;
         {
-            std::unique_lock<std::mutex> lock(m_mutex);
+            std::unique_lock<std::mutex> lock { m_mutex };
             quote = m_quotes[m_cur_quote];
         }
         if (quote.last_update == static_cast<time_t>(0) || quote.state == quote_state::WAITING)
@@ -220,17 +220,17 @@ void wm_window::redraw_window()
 
 void wm_window::draw_string(Pixmap font_pixmap, const std::string& text, int x, int y) const
 {
-    static const std::string font_chars = " !\"#$%&'()*+,-./0123456789:;<=>?"
+    static const std::string font_chars { " !\"#$%&'()*+,-./0123456789:;<=>?"
                                           "@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_"
-                                          "`abcdefghijklmnopqrstuvwxyz{|}~*";
-    static const int chars_per_row = 32;
+                                          "`abcdefghijklmnopqrstuvwxyz{|}~*" };
+    static const int chars_per_row { 32 };
 
     for (auto ch : text) {
-        const auto pos = font_chars.find(ch);
+        const auto pos { font_chars.find(ch) };
 
         if (pos != std::string::npos) {
-            const int char_col = pos%chars_per_row;
-            const int char_row = pos/chars_per_row;
+            const auto char_col { pos%chars_per_row };
+            const auto char_row { pos/chars_per_row };
 
             XCopyArea(m_display, font_pixmap, m_visible_pixmap, m_normal_gc,
                       char_col*CHAR_WIDTH, char_row*CHAR_HEIGHT,
@@ -252,21 +252,21 @@ void wm_window::draw_quote(const std::string& symbol, double last, double change
     std::string last_str, change_str;
 
     if (last >= 100) {
-        auto ilast = std::lround(last);
-        auto ichange = std::lround(change);
+        const auto ilast { std::lround(last) };
+        const auto ichange { std::lround(change) };
 
         if (ilast >= 1000)
-            last_str = (boost::format("%d,%03d") % (ilast / 1000) % (ilast % 1000)).str();
+            last_str = (boost::format { "%d,%03d" } % (ilast / 1000) % (ilast % 1000)).str();
         else
-            last_str = (boost::format("%d") % ilast).str();
-        change_str = (boost::format("%+d") % ichange).str();
+            last_str = (boost::format { "%d" } % ilast).str();
+        change_str = (boost::format { "%+d" } % ichange).str();
     } else {
-        last_str = (boost::format("%.2f") % last).str();
-        change_str = (boost::format("%+.2f") % change).str();
+        last_str = (boost::format { "%.2f" } % last).str();
+        change_str = (boost::format { "%+.2f" } % change).str();
     }
-    auto percent_change_str = (boost::format("%+.2f%%") % percent_change).str();
+    const auto percent_change_str = (boost::format { "%+.2f%%" } % percent_change).str();
 
-    int base_y = (WINDOW_SIZE - 4*CHAR_HEIGHT)/2;
+    int base_y { (WINDOW_SIZE - 4*CHAR_HEIGHT)/2 };
 
     draw_string_centered(m_white_font_pixmap, symbol, base_y);
     base_y += CHAR_HEIGHT;
@@ -274,7 +274,7 @@ void wm_window::draw_quote(const std::string& symbol, double last, double change
     draw_string_centered(m_white_font_pixmap, last_str, base_y);
     base_y += CHAR_HEIGHT;
 
-    auto change_font = change > 0 ? m_green_font_pixmap : m_red_font_pixmap;
+    const auto change_font { change > 0 ? m_green_font_pixmap : m_red_font_pixmap };
     draw_string_centered(change_font, change_str, base_y);
     base_y += CHAR_HEIGHT;
 
@@ -283,14 +283,14 @@ void wm_window::draw_quote(const std::string& symbol, double last, double change
 
 void wm_window::draw_wait(const std::string& symbol) const
 {
-    int base_y = (WINDOW_SIZE - 2*CHAR_HEIGHT)/2;
+    const int base_y { (WINDOW_SIZE - 2*CHAR_HEIGHT)/2 };
     draw_string_centered(m_white_font_pixmap, symbol, base_y);
     draw_string_centered(m_yellow_font_pixmap, "WAIT", base_y + CHAR_HEIGHT);
 }
 
 void wm_window::draw_error(const std::string& symbol) const
 {
-    int base_y = (WINDOW_SIZE - 2*CHAR_HEIGHT)/2;
+    const int base_y { (WINDOW_SIZE - 2*CHAR_HEIGHT)/2 };
     draw_string_centered(m_white_font_pixmap, symbol, base_y);
     draw_string_centered(m_red_font_pixmap, "ERROR", base_y + CHAR_HEIGHT);
 }
@@ -298,10 +298,10 @@ void wm_window::draw_error(const std::string& symbol) const
 void wm_window::run()
 {
     while (true) {
-        const time_t now = time(nullptr);
+        const time_t now { time(nullptr) };
 
         if (m_cur_quote < m_quotes.size()) {
-            std::unique_lock<std::mutex> lock(m_mutex);
+            std::unique_lock<std::mutex> lock { m_mutex };
 
             auto& quote = m_quotes[m_cur_quote];
 
@@ -360,7 +360,7 @@ void wm_window::run()
 
 void wm_window::set_quote_state(const std::string& symbol, double last, double change, double percent_change)
 {
-    std::unique_lock<std::mutex> lock(m_mutex);
+    std::unique_lock<std::mutex> lock { m_mutex };
 
     auto it = std::find_if(std::begin(m_quotes),
                         std::end(m_quotes),
@@ -378,7 +378,7 @@ void wm_window::set_quote_state(const std::string& symbol, double last, double c
 
 void wm_window::set_quote_error(const std::string& symbol)
 {
-    std::unique_lock<std::mutex> lock(m_mutex);
+    std::unique_lock<std::mutex> lock { m_mutex };
 
     auto it = std::find_if(std::begin(m_quotes),
                         std::end(m_quotes),

@@ -20,7 +20,7 @@ size_t curl_request::static_write_callback(char *buffer, size_t size, size_t nme
 
 size_t curl_request::write_callback(char *buffer, size_t size, size_t nmemb)
 {
-    const size_t bytes = size*nmemb;
+    const size_t bytes { size*nmemb };
     m_buffer.append(buffer, bytes);
     return bytes;
 }
