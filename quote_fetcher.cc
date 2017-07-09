@@ -30,25 +30,19 @@ quote_fetcher::quote_fetcher(wm_window& window)
 
                 request.set_url(std::string("http://exame.abril.com.br/coletor/quote/") + symbol);
 
-                if (request.fetch()) {
-                    const auto response_code = request.response_code();
+                if (request.fetch() && request.response_code() == 200) {
+                    std::stringstream response { request.buffer() };
 
-                    if (response_code == 200) {
-                        std::stringstream response { request.buffer() };
+                    boost::property_tree::ptree tree;
+                    boost::property_tree::read_json(response, tree);
 
-                        boost::property_tree::ptree tree;
-                        boost::property_tree::read_json(response, tree);
+                    double last = boost::lexical_cast<double>(tree.get("trdprc_1", "0"));
+                    double change_percent = boost::lexical_cast<double>(tree.get("pctchng", "0"));
+                    double change = boost::lexical_cast<double>(tree.get("netchng_1", "0"));
 
-                        double last = boost::lexical_cast<double>(tree.get("trdprc_1", "0"));
-                        double change_percent = boost::lexical_cast<double>(tree.get("pctchng", "0"));
-                        double change = boost::lexical_cast<double>(tree.get("netchng_1", "0"));
+                    // XXX catch bad_lexical_cast
 
-                        // XXX catch bad_lexical_cast
-
-                        m_window.set_quote_state(symbol, last, change, change_percent);
-                    } else {
-                        m_window.set_quote_error(symbol);
-                    }
+                    m_window.set_quote_state(symbol, last, change, change_percent);
                 } else {
                     m_window.set_quote_error(symbol);
                 }
