@@ -262,7 +262,7 @@ void wm_window::draw_quote(const std::string& symbol, double last, double change
         change_str = (boost::format("%+d") % ichange).str();
     } else {
         last_str = (boost::format("%.2f") % last).str();
-        change_str = (boost::format("%.2f") % change).str();
+        change_str = (boost::format("%+.2f") % change).str();
     }
     auto percent_change_str = (boost::format("%+.2f%%") % percent_change).str();
 
@@ -274,7 +274,7 @@ void wm_window::draw_quote(const std::string& symbol, double last, double change
     draw_string_centered(m_white_font_pixmap, last_str, base_y);
     base_y += CHAR_HEIGHT;
 
-    auto change_font = change_str[0] == '+' ? m_green_font_pixmap : m_red_font_pixmap;
+    auto change_font = change > 0 ? m_green_font_pixmap : m_red_font_pixmap;
     draw_string_centered(change_font, change_str, base_y);
     base_y += CHAR_HEIGHT;
 
