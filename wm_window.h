@@ -21,9 +21,14 @@ public:
 
     bool initialize(int argc, char *argv[]);
     void add_quote(const std::string& symbol);
+    void set_update_interval(time_t update_interval);
+    void set_retry_interval(time_t retry_interval);
+    void set_max_retries(int max_retries);
+
     void run();
 
     void set_quote_state(const std::string& symbol, double last, double change, double percent_change);
+    void set_quote_error(const std::string& symbol);
 
 private:
     bool init_window(int argc, char *argv[]);
@@ -32,14 +37,17 @@ private:
 
     void redraw_window();
     void draw_string(Pixmap font_pixmap, const std::string& text, int x, int y) const;
+    void draw_string_centered(Pixmap font_pixmap, const std::string& text, int y) const;
     void draw_quote(const std::string& symbol, double last, double change, double percent_change) const;
     void draw_wait(const std::string& symbol) const;
+    void draw_error(const std::string& symbol) const;
 
     struct quote_state
     {
         std::string symbol;
         time_t last_update = static_cast<time_t>(0);
-        bool waiting;
+        enum { NONE, WAITING, FETCHED, ERROR } state = NONE;
+        int retries = 0;
         double last;
         double change;
         double percent_change;
@@ -62,8 +70,12 @@ private:
     Pixmap m_white_font_pixmap;
     Pixmap m_green_font_pixmap;
     Pixmap m_red_font_pixmap;
+    Pixmap m_yellow_font_pixmap;
 
     size_t m_cur_quote = 0;
+    time_t m_update_interval = 60;
+    time_t m_retry_interval = 5;
+    int m_max_retries = 3;
 
     static const int WINDOW_SIZE = 64;
     static const int CHAR_WIDTH = 8;

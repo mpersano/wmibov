@@ -1,6 +1,8 @@
 #include <iostream>
+#include <cmath>
 
 #include <boost/format.hpp>
+#include <boost/lexical_cast.hpp>
 
 #include "wm_window.h"
 #include "quote_fetcher.h"
@@ -9,6 +11,7 @@
 #include "font_white.xpm"
 #include "font_green.xpm"
 #include "font_red.xpm"
+#include "font_yellow.xpm"
 
 wm_window::wm_window()
     : m_quote_fetcher { new quote_fetcher(*this) }
@@ -51,6 +54,21 @@ void wm_window::add_quote(const std::string& symbol)
     quote_state quote;
     quote.symbol = symbol;
     m_quotes.push_back(quote);
+}
+
+void wm_window::set_update_interval(time_t update_interval)
+{
+    m_update_interval = update_interval;
+}
+
+void wm_window::set_retry_interval(time_t retry_interval)
+{
+    m_retry_interval = retry_interval;
+}
+
+void wm_window::set_max_retries(int max_retries)
+{
+    m_max_retries = max_retries;
 }
 
 Pixel wm_window::get_color(const char *name)
@@ -166,6 +184,7 @@ bool wm_window::init_pixmaps()
     XpmCreatePixmapFromData(m_display, m_root_window, font_white, &m_white_font_pixmap, nullptr, &xpm_attribs);
     XpmCreatePixmapFromData(m_display, m_root_window, font_green, &m_green_font_pixmap, nullptr, &xpm_attribs);
     XpmCreatePixmapFromData(m_display, m_root_window, font_red, &m_red_font_pixmap, nullptr, &xpm_attribs);
+    XpmCreatePixmapFromData(m_display, m_root_window, font_yellow, &m_yellow_font_pixmap, nullptr, &xpm_attribs);
 
     return true;
 }
@@ -181,8 +200,10 @@ void wm_window::redraw_window()
             std::unique_lock<std::mutex> lock(m_mutex);
             quote = m_quotes[m_cur_quote];
         }
-        if (quote.last_update == static_cast<time_t>(0) || quote.waiting)
+        if (quote.last_update == static_cast<time_t>(0) || quote.state == quote_state::WAITING)
             draw_wait(quote.symbol);
+        else if (quote.state == quote_state::ERROR)
+            draw_error(quote.symbol);
         else
             draw_quote(quote.symbol, quote.last, quote.change, quote.percent_change);
     }
@@ -205,7 +226,7 @@ void wm_window::draw_string(Pixmap font_pixmap, const std::string& text, int x, 
     static const int chars_per_row = 32;
 
     for (auto ch : text) {
-        auto pos = font_chars.find(ch);
+        const auto pos = font_chars.find(ch);
 
         if (pos != std::string::npos) {
             const int char_col = pos%chars_per_row;
@@ -221,44 +242,61 @@ void wm_window::draw_string(Pixmap font_pixmap, const std::string& text, int x, 
     }
 }
 
+void wm_window::draw_string_centered(Pixmap font_pixmap, const std::string& text, int y) const
+{
+      draw_string(font_pixmap, text, (WINDOW_SIZE - text.size()*CHAR_WIDTH)/2, y);
+}
+
 void wm_window::draw_quote(const std::string& symbol, double last, double change, double percent_change) const
 {
-    auto last_str = (boost::format("%.2f") % last).str();
-    auto change_str = (boost::format("%+.2f") % change).str();
+    std::string last_str, change_str;
+
+    if (last >= 100) {
+        auto ilast = std::lround(last);
+        auto ichange = std::lround(change);
+
+        if (ilast >= 1000)
+            last_str = (boost::format("%d,%03d") % (ilast / 1000) % (ilast % 1000)).str();
+        else
+            last_str = (boost::format("%d") % ilast).str();
+        change_str = (boost::format("%+d") % ichange).str();
+    } else {
+        last_str = (boost::format("%.2f") % last).str();
+        change_str = (boost::format("%.2f") % change).str();
+    }
     auto percent_change_str = (boost::format("%+.2f%%") % percent_change).str();
 
     int base_y = (WINDOW_SIZE - 4*CHAR_HEIGHT)/2;
-    const auto draw_string_centered = [&](Pixmap font_pixmap, const std::string& str)
-                                      {
-                                          draw_string(font_pixmap, str, (WINDOW_SIZE - str.size()*CHAR_WIDTH)/2, base_y);
-                                          base_y += CHAR_HEIGHT;
-                                      };
 
-    draw_string_centered(m_white_font_pixmap, symbol);
-    draw_string_centered(m_white_font_pixmap, last_str);
+    draw_string_centered(m_white_font_pixmap, symbol, base_y);
+    base_y += CHAR_HEIGHT;
+
+    draw_string_centered(m_white_font_pixmap, last_str, base_y);
+    base_y += CHAR_HEIGHT;
 
     auto change_font = change_str[0] == '+' ? m_green_font_pixmap : m_red_font_pixmap;
-    draw_string_centered(change_font, change_str);
-    draw_string_centered(change_font, percent_change_str);
+    draw_string_centered(change_font, change_str, base_y);
+    base_y += CHAR_HEIGHT;
+
+    draw_string_centered(change_font, percent_change_str, base_y);
 }
 
 void wm_window::draw_wait(const std::string& symbol) const
 {
     int base_y = (WINDOW_SIZE - 2*CHAR_HEIGHT)/2;
-    const auto draw_string_centered = [&](Pixmap font_pixmap, const std::string& str)
-                                      {
-                                          draw_string(font_pixmap, str, (WINDOW_SIZE - str.size()*CHAR_WIDTH)/2, base_y);
-                                          base_y += CHAR_HEIGHT;
-                                      };
+    draw_string_centered(m_white_font_pixmap, symbol, base_y);
+    draw_string_centered(m_yellow_font_pixmap, "WAIT", base_y + CHAR_HEIGHT);
+}
 
-    draw_string_centered(m_white_font_pixmap, symbol);
-    draw_string_centered(m_red_font_pixmap, "WAIT");
+void wm_window::draw_error(const std::string& symbol) const
+{
+    int base_y = (WINDOW_SIZE - 2*CHAR_HEIGHT)/2;
+    draw_string_centered(m_white_font_pixmap, symbol, base_y);
+    draw_string_centered(m_red_font_pixmap, "ERROR", base_y + CHAR_HEIGHT);
 }
 
 void wm_window::run()
 {
-    static const time_t update_interval = 30;
-
     while (true) {
         const time_t now = time(nullptr);
 
@@ -266,10 +304,22 @@ void wm_window::run()
             std::unique_lock<std::mutex> lock(m_mutex);
 
             auto& quote = m_quotes[m_cur_quote];
-            if (!quote.waiting) {
-                if (quote.last_update == static_cast<time_t>(0) ||
-                        now - quote.last_update >= update_interval) {
-                    quote.waiting = true;
+
+            if (quote.state != quote_state::WAITING) {
+                bool update;
+                if (quote.last_update == static_cast<time_t>(0)) {
+                    update = true;
+                } else if (quote.state == quote_state::FETCHED) {
+                    update = now - quote.last_update >= m_update_interval;
+                } else if (quote.state == quote_state::ERROR && quote.retries < m_max_retries) {
+                    update = now - quote.last_update >= m_retry_interval;
+                } else {
+                    update = false;
+                }
+
+                if (update) {
+                    ++quote.retries;
+                    quote.state = quote_state::WAITING;
                     m_quote_fetcher->fetch(quote.symbol);
                 }
             }
@@ -320,7 +370,22 @@ void wm_window::set_quote_state(const std::string& symbol, double last, double c
         quote.last = last;
         quote.change = change;
         quote.percent_change = percent_change;
-        quote.waiting = false;
+        quote.state = quote_state::FETCHED;
+        quote.last_update = time(nullptr);
+        quote.retries = 0;
+    }
+}
+
+void wm_window::set_quote_error(const std::string& symbol)
+{
+    std::unique_lock<std::mutex> lock(m_mutex);
+
+    auto it = std::find_if(std::begin(m_quotes),
+                        std::end(m_quotes),
+                        [&](const quote_state& quote) { return quote.symbol == symbol; });
+    if (it != std::end(m_quotes)) {
+        auto& quote = *it;
+        quote.state = quote_state::ERROR;
         quote.last_update = time(nullptr);
     }
 }

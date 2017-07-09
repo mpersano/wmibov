@@ -1,5 +1,3 @@
-#include <iostream>
-
 #include <boost/lexical_cast.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/json_parser.hpp>
@@ -30,26 +28,30 @@ quote_fetcher::quote_fetcher(wm_window& window)
                     m_queue.pop_front();
                 }
 
-                std::cerr << "fetching " << symbol << "\n";
-
                 request.set_url(std::string("http://exame.abril.com.br/coletor/quote/") + symbol);
 
                 if (request.fetch()) {
-                    std::stringstream response { request.buffer() };
+                    const auto response_code = request.response_code();
 
-                    boost::property_tree::ptree tree;
-                    boost::property_tree::read_json(response, tree);
+                    if (response_code == 200) {
+                        std::stringstream response { request.buffer() };
 
-                    double last = boost::lexical_cast<double>(tree.get("trdprc_1", "0"));
-                    double change_percent = boost::lexical_cast<double>(tree.get("pctchng", "0"));
-                    double change = boost::lexical_cast<double>(tree.get("netchng_1", "0"));
+                        boost::property_tree::ptree tree;
+                        boost::property_tree::read_json(response, tree);
 
-                    // XXX catch bad_lexical_cast
+                        double last = boost::lexical_cast<double>(tree.get("trdprc_1", "0"));
+                        double change_percent = boost::lexical_cast<double>(tree.get("pctchng", "0"));
+                        double change = boost::lexical_cast<double>(tree.get("netchng_1", "0"));
 
-                    m_window.set_quote_state(symbol, last, change_percent, change);
+                        // XXX catch bad_lexical_cast
+
+                        m_window.set_quote_state(symbol, last, change, change_percent);
+                    } else {
+                        m_window.set_quote_error(symbol);
+                    }
+                } else {
+                    m_window.set_quote_error(symbol);
                 }
-
-                // XXX handle error
             }
         } }
     , m_done { false }
