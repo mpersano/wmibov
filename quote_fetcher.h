@@ -25,7 +25,7 @@ private:
     wm_window& m_window;
     std::thread m_thread;
     std::list<std::string> m_queue;
+    bool m_done;
     std::mutex m_mutex;
     std::condition_variable m_condition;
-    bool m_done;
 };

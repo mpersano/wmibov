@@ -54,7 +54,10 @@ quote_fetcher::quote_fetcher(wm_window& window)
 
 quote_fetcher::~quote_fetcher()
 {
-    m_done = true;
+    {
+        std::unique_lock<std::mutex> lock { m_mutex };
+        m_done = true;
+    }
     m_condition.notify_one();
     m_thread.join();
 }
